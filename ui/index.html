@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Geolocation</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.8.0/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div id="map" style="width:100%; height: 100vh"></div>
+    <script src="https://unpkg.com/leaflet@1.8.0/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+
+    <script>
+        var map = L.map('map').setView([39.766193, 30.526714], 15);
+        mapLink = "<a href='http://openstreetmap.org'>OpenStreetMap</a>";
+        L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+            attribution: 'Leaflet &copy; ' + mapLink + ', contribution',
+            maxZoom: 18
+        }).addTo(map);
+
+        var taxiIcon = L.icon({
+            iconUrl: 'img/taxi.png',
+            iconSize: [70, 70]
+        });
+
+        var marker = L.marker([39.77978275602291, 30.51109313964844], { icon: taxiIcon }).addTo(map);
+
+        var waypoints = [
+            { cityPoint: "A", coordinates: L.latLng(39.77978275602291, 30.51109313964844) },
+            { cityPoint: "D", coordinates: L.latLng(39.76460989601462, 30.509462356567386) },
+            { cityPoint: "B", coordinates: L.latLng(39.7779358040303, 30.52705764770508) },
+            { cityPoint: "E", coordinates: L.latLng(39.7652036794959, 30.52911758422852) },
+            { cityPoint: "C", coordinates: L.latLng(39.773252239280765, 30.54182052612305) },
+            { cityPoint: "F", coordinates: L.latLng(39.7624326461067, 30.543451309204105) }
+        ];
+
+        // Add circles and labels for city points
+        for (const point of waypoints) {
+            L.circle(point.coordinates, {
+                radius: 100, // Adjust radius as needed (in meters)
+                color: 'blue',
+                fillColor: '#3388ff',
+                fillOpacity: 0.7
+            }).addTo(map);
+
+            L.marker(point.coordinates, {
+                icon: L.divIcon({
+                    className: 'city-point-icon',
+                    html: `<div style="text-align: center; font-size: 14px; font-weight: bold;">${point.cityPoint}</div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [10, 10]
+                })
+            }).addTo(map);
+        }
+
+        map.on('click', function (e) {
+            var targetCity = getCityPointFromCoordinates(e.latlng);
+
+            if (targetCity) {
+                // Send request to the backend to get the fastest route
+                fetchFastestRoute(targetCity);
+            }
+        });
+
+        function getCityPointFromCoordinates(latlng) {
+            for (const point of waypoints) {
+                // Check if clicked point is close to any city point
+                if (latlng.distanceTo(point.coordinates) < 200) { // 200m threshold for detection
+                    return point.cityPoint;
+                }
+            }
+            return null;
+        }
+
+        function fetchFastestRoute(targetCity) {
+            fetch('http://localhost:8000/get_fastest_route', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ targetNode: targetCity })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.fastest_path) {
+                    // Draw the fastest path on the map
+                    drawPathOnMap(data.fastest_path);
+                }
+            })
+            .catch(error => console.error('Error fetching fastest route:', error));
+        }
+
+        function drawPathOnMap(fastestPath) {
+            // Extract coordinates for each city point in the fastest path
+            const routeWaypoints = fastestPath.map(city => {
+                const cityPoint = waypoints.find(point => point.cityPoint === city);
+                return cityPoint ? cityPoint.coordinates : null;
+            }).filter(coord => coord !== null);
+
+            if (routeWaypoints.length > 1) {
+                L.Routing.control({
+                    waypoints: routeWaypoints
+                }).addTo(map);
+            }
+        }
+    </script>
+</body>
+
+</html>
